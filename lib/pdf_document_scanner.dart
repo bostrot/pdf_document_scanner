@@ -36,8 +36,6 @@ library pdf_document_scanner;
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';
 import 'package:flutter/material.dart';

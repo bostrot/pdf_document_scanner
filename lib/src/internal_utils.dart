@@ -90,10 +90,6 @@ Future<PdfScanResult> _buildSearchablePdf(List<File> images, PdfScannerOptions o
     final RecognizedText recognized = await textRecognizer.processImage(inputImage);
     content.writeln(recognized.text);
 
-    // No scaling needed: pixel coordinates map directly to PDF points
-    final scaleX = 1.0;
-    final scaleY = 1.0;
-
     doc.addPage(pw.Page(
       pageFormat: pageFormat,
       margin: pw.EdgeInsets.zero,
