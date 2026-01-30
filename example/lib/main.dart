@@ -62,8 +62,14 @@ class _ScannerHomePageState extends State<ScannerHomePage> {
                       resetTitle: 'Reset',
                     ),
                   );
+                  if (pdf == null) {
+                    setState(() {
+                      _isScanning = false;
+                    });
+                    return;
+                  }
                   setState(() {
-                    _pdfFile = pdf;
+                    _pdfFile = pdf.file;
                     _isScanning = false;
                   });
                 },

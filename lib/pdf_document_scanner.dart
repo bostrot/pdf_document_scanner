@@ -98,14 +98,15 @@ class PdfDocumentScanner {
               final file = File.fromUri(uri);
               if (await file.exists()) {
                 scannedFiles.add(file);
+                pageCount++;
               }
+            }
 
-              // Ask if user wants to scan another page (unless we've hit the limit)
-              if (opts.maxPages == null || pageCount < opts.maxPages!) {
-                continuScanning = await _askScanAnother(context, opts);
-              } else {
-                continuScanning = false;
-              }
+            // Ask if user wants to scan another page (unless we've hit the limit)
+            if (opts.maxPages == null || pageCount < opts.maxPages!) {
+              continuScanning = await _askScanAnother(context, opts);
+            } else {
+              continuScanning = false;
             }
           }
         } catch (_) {
