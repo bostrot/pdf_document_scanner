@@ -36,6 +36,7 @@ library pdf_document_scanner;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';
 import 'package:flutter/material.dart';
@@ -46,10 +47,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:dartcv4/dartcv.dart' as cv;
 
 part 'src/options.dart';
 
 part 'src/internal_utils.dart';
+
+part 'src/image_preprocessor.dart';
 
 /// Provides a high‑level API to scan documents and return a searchable PDF.
 class PdfDocumentScanner {
@@ -89,16 +93,41 @@ class PdfDocumentScanner {
       while (continuScanning &&
           (opts.maxPages == null || pageCount < opts.maxPages!)) {
         try {
-          Map scannedMap =
-              await FlutterDocScanner().getScannedDocumentAsImages();
-          if (scannedMap.isNotEmpty) {
-            List<Uri> uris = extractImageUris(scannedMap['Uri']);
+          final dynamic scanned = await FlutterDocScanner()
+              .getScannedDocumentAsImages();
 
-            for (final uri in uris) {
-              final file = File.fromUri(uri);
-              if (await file.exists()) {
-                scannedFiles.add(file);
-                pageCount++;
+          // Normalize different possible return shapes into a List<String>
+          List<String> imageStrings = [];
+          // Newer plugin returns ImageScanResult
+          if (scanned is ImageScanResult) {
+            imageStrings = scanned.images;
+          } else if (scanned is Map) {
+            imageStrings = (scanned['images'] as List?)?.cast<String>() ?? [];
+          } else if (scanned is List) {
+            imageStrings = scanned.cast<String>();
+          }
+
+          if (imageStrings.isNotEmpty) {
+            for (final s in imageStrings) {
+              try {
+                // s may be a file path or a file:// URI
+                final uri = Uri.tryParse(s);
+                File? file;
+                if (uri != null && uri.scheme == 'file') {
+                  file = File.fromUri(uri);
+                } else if (s.startsWith('/')) {
+                  file = File(s);
+                } else {
+                  // Unsupported scheme (e.g. content://) - skip for now
+                  continue;
+                }
+
+                if (await file.exists()) {
+                  scannedFiles.add(file);
+                  pageCount++;
+                }
+              } catch (_) {
+                // ignore individual file errors
               }
             }
 
@@ -132,11 +161,28 @@ class PdfDocumentScanner {
       return null;
     }
 
-    // Build the PDF from processed pages.
-    final scanResult = await _buildSearchablePdf(scannedFiles, opts);
+    final processedFiles = await _preprocessScannedFiles(
+      scannedFiles,
+      options: opts.enhancementOptions,
+    );
+
+    // Let the user preview originals vs. processed pages and choose.
+    final chosenFiles =
+        await _showPreviewSelector(context, scannedFiles, processedFiles) ??
+        processedFiles;
+
+    // Build the PDF from the chosen pages.
+    final scanResult = await _buildSearchablePdf(chosenFiles, opts);
 
     // Clean up temporary scanned images
     for (final file in scannedFiles) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+
+    for (final file in processedFiles) {
+      if (scannedFiles.contains(file)) continue;
       try {
         if (await file.exists()) await file.delete();
       } catch (_) {}

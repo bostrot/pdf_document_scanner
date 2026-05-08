@@ -1,5 +1,153 @@
 part of pdf_document_scanner;
 
+/// Options for document image enhancement pipeline.
+///
+/// Each correction can be toggled on/off independently. Use [DocumentEnhancementOptions.disabled]
+/// to disable all corrections, or [DocumentEnhancementOptions.defaults] for sensible defaults.
+@immutable
+class DocumentEnhancementOptions {
+  /// Whether to apply perspective correction (detect document edges and flatten).
+  final bool enablePerspectiveCorrection;
+
+  /// Whether to apply deskewing (correct slight rotation angles).
+  final bool enableDeskew;
+
+  /// Whether to apply bilateral filtering (noise removal with edge preservation).
+  final bool enableBilateralFilter;
+
+  /// Whether to apply CLAHE (contrast limited adaptive histogram enhancement).
+  final bool enableClahe;
+
+  /// Whether to apply adaptive thresholding (convert to pure black & white).
+  final bool enableAdaptiveThreshold;
+
+  /// Whether to apply morphological operations (noise cleanup after thresholding).
+  final bool enableMorphologicalCleanup;
+
+  /// Clip limit for CLAHE. Higher values = more local contrast, but more noise.
+  /// Recommended range: 1.0 (subtle) to 4.0 (aggressive).
+  final double claheClipLimit;
+
+  /// Kernel size for bilateral filtering. Larger = more blur, but slower.
+  /// Must be odd. Recommended: 5-15.
+  final int bilateralFilterSize;
+
+  /// Sigma color for bilateral filtering. Higher = more color range considered.
+  /// Recommended: 30-80.
+  final double bilateralSigmaColor;
+
+  /// Sigma space for bilateral filtering. Higher = farther pixels influence each other.
+  /// Recommended: 30-80.
+  final double bilateralSigmaSpace;
+
+  /// Block size for adaptive thresholding. Larger = larger context considered.
+  /// Must be odd. Recommended: 11-41.
+  final int adaptiveThresholdBlockSize;
+
+  /// Constant subtracted from the mean. Higher = darker output.
+  /// Recommended: 5-20.
+  final double adaptiveThresholdConstant;
+
+  const DocumentEnhancementOptions({
+    this.enablePerspectiveCorrection = true,
+    this.enableDeskew = true,
+    this.enableBilateralFilter = true,
+    this.enableClahe = true,
+    this.enableAdaptiveThreshold = true,
+    this.enableMorphologicalCleanup = true,
+    this.claheClipLimit = 2.0,
+    this.bilateralFilterSize = 9,
+    this.bilateralSigmaColor = 50.0,
+    this.bilateralSigmaSpace = 50.0,
+    this.adaptiveThresholdBlockSize = 11,
+    this.adaptiveThresholdConstant = 10.0,
+  });
+
+  /// All corrections enabled with default parameters.
+  static const DocumentEnhancementOptions defaults =
+      DocumentEnhancementOptions();
+
+  /// All corrections disabled.
+  static const DocumentEnhancementOptions disabled = DocumentEnhancementOptions(
+    enablePerspectiveCorrection: false,
+    enableDeskew: false,
+    enableBilateralFilter: false,
+    enableClahe: false,
+    enableAdaptiveThreshold: false,
+    enableMorphologicalCleanup: false,
+  );
+
+  /// Creates a copy of this options with the given fields replaced.
+  DocumentEnhancementOptions copyWith({
+    bool? enablePerspectiveCorrection,
+    bool? enableDeskew,
+    bool? enableBilateralFilter,
+    bool? enableClahe,
+    bool? enableAdaptiveThreshold,
+    bool? enableMorphologicalCleanup,
+    double? claheClipLimit,
+    int? bilateralFilterSize,
+    double? bilateralSigmaColor,
+    double? bilateralSigmaSpace,
+    int? adaptiveThresholdBlockSize,
+    double? adaptiveThresholdConstant,
+  }) {
+    return DocumentEnhancementOptions(
+      enablePerspectiveCorrection:
+          enablePerspectiveCorrection ?? this.enablePerspectiveCorrection,
+      enableDeskew: enableDeskew ?? this.enableDeskew,
+      enableBilateralFilter:
+          enableBilateralFilter ?? this.enableBilateralFilter,
+      enableClahe: enableClahe ?? this.enableClahe,
+      enableAdaptiveThreshold:
+          enableAdaptiveThreshold ?? this.enableAdaptiveThreshold,
+      enableMorphologicalCleanup:
+          enableMorphologicalCleanup ?? this.enableMorphologicalCleanup,
+      claheClipLimit: claheClipLimit ?? this.claheClipLimit,
+      bilateralFilterSize: bilateralFilterSize ?? this.bilateralFilterSize,
+      bilateralSigmaColor: bilateralSigmaColor ?? this.bilateralSigmaColor,
+      bilateralSigmaSpace: bilateralSigmaSpace ?? this.bilateralSigmaSpace,
+      adaptiveThresholdBlockSize:
+          adaptiveThresholdBlockSize ?? this.adaptiveThresholdBlockSize,
+      adaptiveThresholdConstant:
+          adaptiveThresholdConstant ?? this.adaptiveThresholdConstant,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DocumentEnhancementOptions &&
+          enablePerspectiveCorrection == other.enablePerspectiveCorrection &&
+          enableDeskew == other.enableDeskew &&
+          enableBilateralFilter == other.enableBilateralFilter &&
+          enableClahe == other.enableClahe &&
+          enableAdaptiveThreshold == other.enableAdaptiveThreshold &&
+          enableMorphologicalCleanup == other.enableMorphologicalCleanup &&
+          claheClipLimit == other.claheClipLimit &&
+          bilateralFilterSize == other.bilateralFilterSize &&
+          bilateralSigmaColor == other.bilateralSigmaColor &&
+          bilateralSigmaSpace == other.bilateralSigmaSpace &&
+          adaptiveThresholdBlockSize == other.adaptiveThresholdBlockSize &&
+          adaptiveThresholdConstant == other.adaptiveThresholdConstant;
+
+  @override
+  int get hashCode => Object.hash(
+    enablePerspectiveCorrection,
+    enableDeskew,
+    enableBilateralFilter,
+    enableClahe,
+    enableAdaptiveThreshold,
+    enableMorphologicalCleanup,
+    claheClipLimit,
+    bilateralFilterSize,
+    bilateralSigmaColor,
+    bilateralSigmaSpace,
+    adaptiveThresholdBlockSize,
+    adaptiveThresholdConstant,
+  );
+}
+
 /// OCR text positioning settings for PDF generation
 class OcrSettings {
   /// Source image DPI - determines how to convert pixel coordinates to PDF points
@@ -85,6 +233,9 @@ class PdfScannerOptions {
   /// to the platform accent colour.
   final Color accentColor;
 
+  /// Document image enhancement options (perspective correction, deskew, filtering, etc.)
+  final DocumentEnhancementOptions enhancementOptions;
+
   /// OCR text positioning settings for PDF generation
   final OcrSettings ocrSettings;
 
@@ -97,6 +248,7 @@ class PdfScannerOptions {
     this.blackWhiteTitle = 'B & W',
     this.resetTitle = 'Reset',
     this.accentColor = Colors.blue,
+    this.enhancementOptions = const DocumentEnhancementOptions(),
     this.ocrSettings = const OcrSettings(),
   });
 }

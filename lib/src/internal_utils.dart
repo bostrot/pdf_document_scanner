@@ -152,6 +152,156 @@ Future<PdfScanResult> _buildSearchablePdf(List<File> images, PdfScannerOptions o
   return PdfScanResult(file: outputFile, content: content.toString());
 }
 
+/// Show a preview allowing the user to compare original vs. processed pages
+/// and choose which set should be used to build the final PDF.
+///
+/// Returns the selected list of files (either [originals] or [processed])
+/// or `null` if the user cancelled.
+Future<List<File>?> _showPreviewSelector(
+  BuildContext context,
+  List<File> originals,
+  List<File> processed,
+) async {
+  if (originals.isEmpty || processed.isEmpty) return null;
+
+  final result = await Navigator.of(context).push<List<File>>(MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (context) {
+      return _PreviewSelectorPage(originals: originals, processed: processed);
+    },
+  ));
+
+  return result;
+}
+
+class _PreviewSelectorPage extends StatefulWidget {
+  final List<File> originals;
+  final List<File> processed;
+
+  const _PreviewSelectorPage({required this.originals, required this.processed});
+
+  @override
+  State<_PreviewSelectorPage> createState() => _PreviewSelectorPageState();
+}
+
+class _PreviewSelectorPageState extends State<_PreviewSelectorPage> {
+  bool showProcessed = true;
+  int pageIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = showProcessed ? widget.processed : widget.originals;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Preview pages'),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 520;
+                  final toggle = ToggleButtons(
+                    isSelected: [!showProcessed, showProcessed],
+                    onPressed: (i) => setState(() => showProcessed = i == 1),
+                    constraints: const BoxConstraints(minHeight: 40, minWidth: 110),
+                    children: const [Text('Original'), Text('Processed')],
+                  );
+
+                  return isWide
+                      ? Row(
+                          children: [
+                            toggle,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                showProcessed
+                                    ? 'Processed preview: geometry correction + contrast'
+                                    : 'Original preview: no preprocessing applied',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            toggle,
+                            const SizedBox(height: 12),
+                            Text(
+                              showProcessed
+                                  ? 'Processed preview: geometry correction + contrast'
+                                  : 'Original preview: no preprocessing applied',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        );
+                },
+              ),
+            ),
+            Expanded(
+              child: PageView.builder(
+                itemCount: pages.length,
+                onPageChanged: (i) => setState(() => pageIndex = i),
+                itemBuilder: (context, i) {
+                  final file = pages[i];
+                  return Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: InteractiveViewer(
+                          minScale: 1.0,
+                          maxScale: 5.0,
+                          child: Center(
+                            child: Image.file(file, fit: BoxFit.contain),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('Page ${pageIndex + 1} / ${pages.length}'),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(widget.originals),
+                    child: const Text('Use Originals'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(widget.processed),
+                    child: const Text('Use Processed'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 List<Uri> extractImageUris(String input) {
   final re = RegExp(r'Page\{imageUri=(file://[^}\]]+)\}');
   return re
