@@ -1,9 +1,45 @@
 part of pdf_document_scanner;
 
+/// Pre-configured enhancement presets similar to Genius Scan.
+///
+/// These presets provide common document enhancement configurations
+/// that can be applied to scanned images for optimal results.
+enum DocumentEnhancementPreset {
+  /// Auto-detect the best enhancement based on image analysis.
+  /// Applies a balanced pipeline with adaptive settings.
+  auto,
+
+  /// Pure black and white (binary threshold).
+  /// Best for text documents with clear contrast.
+  blackAndWhite,
+
+  /// Original colors preserved with light enhancement.
+  /// Best for documents with color elements (logos, highlighted text).
+  color,
+
+  /// Photo mode with minimal processing.
+  /// Best for photographs or documents where natural appearance is preferred.
+  photo,
+}
+
+/// Export format for scanned documents.
+enum ExportFormat {
+  /// Portable Document Format (multi-page support).
+  pdf,
+
+  /// JPEG image format (lossy compression).
+  jpg,
+
+  /// PNG image format (lossless compression).
+  png,
+}
+
 /// Options for document image enhancement pipeline.
 ///
 /// Each correction can be toggled on/off independently. Use [DocumentEnhancementOptions.disabled]
 /// to disable all corrections, or [DocumentEnhancementOptions.defaults] for sensible defaults.
+///
+/// Use [DocumentEnhancementOptions.fromPreset] to create options from a preset.
 @immutable
 class DocumentEnhancementOptions {
   /// Whether to apply perspective correction (detect document edges and flatten).
@@ -48,6 +84,14 @@ class DocumentEnhancementOptions {
   /// Recommended: 5-20.
   final double adaptiveThresholdConstant;
 
+  /// The enhancement preset to use.
+  /// When set, individual settings are overridden by preset defaults.
+  final DocumentEnhancementPreset preset;
+
+  /// Intensity of curvature/perspective correction (0.0 to 1.0).
+  /// 0.0 = no correction, 1.0 = full correction.
+  final double curvatureIntensity;
+
   const DocumentEnhancementOptions({
     this.enablePerspectiveCorrection = true,
     this.enableDeskew = true,
@@ -61,7 +105,62 @@ class DocumentEnhancementOptions {
     this.bilateralSigmaSpace = 50.0,
     this.adaptiveThresholdBlockSize = 11,
     this.adaptiveThresholdConstant = 10.0,
+    this.preset = DocumentEnhancementPreset.auto,
+    this.curvatureIntensity = 0.8,
   });
+
+  /// Creates options from a preset configuration.
+  ///
+  /// The [curvatureIntensity] parameter controls the strength of
+  /// perspective correction (0.0 to 1.0).
+  factory DocumentEnhancementOptions.fromPreset(
+    DocumentEnhancementPreset preset, {
+    double curvatureIntensity = 0.8,
+  }) {
+    switch (preset) {
+      case DocumentEnhancementPreset.auto:
+        return DocumentEnhancementOptions(
+          enablePerspectiveCorrection: true,
+          enableDeskew: true,
+          enableBilateralFilter: true,
+          enableClahe: true,
+          enableAdaptiveThreshold: true,
+          enableMorphologicalCleanup: true,
+          curvatureIntensity: curvatureIntensity,
+        );
+      case DocumentEnhancementPreset.blackAndWhite:
+        return DocumentEnhancementOptions(
+          enablePerspectiveCorrection: true,
+          enableDeskew: true,
+          enableBilateralFilter: true,
+          enableClahe: true,
+          enableAdaptiveThreshold: true,
+          enableMorphologicalCleanup: true,
+          claheClipLimit: 3.0,
+          curvatureIntensity: curvatureIntensity,
+        );
+      case DocumentEnhancementPreset.color:
+        return DocumentEnhancementOptions(
+          enablePerspectiveCorrection: true,
+          enableDeskew: true,
+          enableBilateralFilter: true,
+          enableClahe: false,
+          enableAdaptiveThreshold: false,
+          enableMorphologicalCleanup: false,
+          curvatureIntensity: curvatureIntensity,
+        );
+      case DocumentEnhancementPreset.photo:
+        return DocumentEnhancementOptions(
+          enablePerspectiveCorrection: true,
+          enableDeskew: false,
+          enableBilateralFilter: true,
+          enableClahe: false,
+          enableAdaptiveThreshold: false,
+          enableMorphologicalCleanup: false,
+          curvatureIntensity: curvatureIntensity,
+        );
+    }
+  }
 
   /// All corrections enabled with default parameters.
   static const DocumentEnhancementOptions defaults =
@@ -91,6 +190,8 @@ class DocumentEnhancementOptions {
     double? bilateralSigmaSpace,
     int? adaptiveThresholdBlockSize,
     double? adaptiveThresholdConstant,
+    DocumentEnhancementPreset? preset,
+    double? curvatureIntensity,
   }) {
     return DocumentEnhancementOptions(
       enablePerspectiveCorrection:
@@ -111,6 +212,8 @@ class DocumentEnhancementOptions {
           adaptiveThresholdBlockSize ?? this.adaptiveThresholdBlockSize,
       adaptiveThresholdConstant:
           adaptiveThresholdConstant ?? this.adaptiveThresholdConstant,
+      preset: preset ?? this.preset,
+      curvatureIntensity: curvatureIntensity ?? this.curvatureIntensity,
     );
   }
 
@@ -129,7 +232,9 @@ class DocumentEnhancementOptions {
           bilateralSigmaColor == other.bilateralSigmaColor &&
           bilateralSigmaSpace == other.bilateralSigmaSpace &&
           adaptiveThresholdBlockSize == other.adaptiveThresholdBlockSize &&
-          adaptiveThresholdConstant == other.adaptiveThresholdConstant;
+          adaptiveThresholdConstant == other.adaptiveThresholdConstant &&
+          preset == other.preset &&
+          curvatureIntensity == other.curvatureIntensity;
 
   @override
   int get hashCode => Object.hash(
@@ -145,6 +250,8 @@ class DocumentEnhancementOptions {
     bilateralSigmaSpace,
     adaptiveThresholdBlockSize,
     adaptiveThresholdConstant,
+    preset.hashCode,
+    curvatureIntensity.hashCode,
   );
 }
 
@@ -239,6 +346,14 @@ class PdfScannerOptions {
   /// OCR text positioning settings for PDF generation
   final OcrSettings ocrSettings;
 
+  /// Export format for the final output
+  final ExportFormat exportFormat;
+
+  /// When true, skip the internal preview selector screen that lets the user
+  /// choose between original and processed images. The processed images are
+  /// used directly. Defaults to `false`.
+  final bool skipPreview;
+
   const PdfScannerOptions({
     this.multiPage = false,
     this.maxPages,
@@ -250,5 +365,7 @@ class PdfScannerOptions {
     this.accentColor = Colors.blue,
     this.enhancementOptions = const DocumentEnhancementOptions(),
     this.ocrSettings = const OcrSettings(),
+    this.exportFormat = ExportFormat.pdf,
+    this.skipPreview = false,
   });
 }

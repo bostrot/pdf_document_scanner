@@ -167,9 +167,10 @@ class PdfDocumentScanner {
     );
 
     // Let the user preview originals vs. processed pages and choose.
-    final chosenFiles =
-        await _showPreviewSelector(context, scannedFiles, processedFiles) ??
-        processedFiles;
+    final chosenFiles = opts.skipPreview
+        ? processedFiles
+        : (await _showPreviewSelector(context, scannedFiles, processedFiles) ??
+            processedFiles);
 
     // Build the PDF from the chosen pages.
     final scanResult = await _buildSearchablePdf(chosenFiles, opts);
